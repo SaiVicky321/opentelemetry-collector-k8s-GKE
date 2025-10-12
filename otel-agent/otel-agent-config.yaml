@@ -1,0 +1,149 @@
+# 5. ConfigMap - OTel Agent Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-agent-config
+  namespace: observability
+  labels:
+    app: otel-agent
+    component: agent
+data:
+  otel-agent-config.yaml: |
+    receivers:
+      # OTLP receiver for applications (gRPC)
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      
+      # # Prometheus receiver for scraping pod metrics
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: 'otel-agent'
+              scrape_interval: 30s
+              static_configs:
+                - targets: ['localhost:8888']
+
+    processors:
+      # Memory limiter to prevent OOM
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+
+      # Batch processor for efficiency
+      batch:
+        timeout: 30s
+        send_batch_size: 1024
+        send_batch_max_size: 2048
+
+      # Fix timing issues
+      metricstarttime:
+        strategy: subtract_initial_point
+
+      # Kubernetes attributes processor for metadata enrichment
+      k8sattributes:
+        auth_type: "serviceAccount"
+        passthrough: false
+        filter:
+          node_from_env_var: K8S_NODE_NAME
+        extract:
+          metadata:
+            - k8s.namespace.name
+            - k8s.deployment.name
+            - k8s.statefulset.name
+            - k8s.daemonset.name
+            - k8s.cronjob.name
+            - k8s.job.name
+            - k8s.node.name
+            - k8s.pod.name
+            - k8s.pod.uid
+            - k8s.pod.start_time
+          labels:
+            - tag_name: app.label.component
+              key: app.kubernetes.io/component
+              from: pod
+            - tag_name: app.label.name
+              key: app.kubernetes.io/name
+              from: pod
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.ip
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.uid
+          - sources:
+              - from: connection
+
+      # Resource processor to add agent-specific attributes
+      resource:
+        attributes:
+          - key: otel.collector.type
+            value: "agent"
+            action: upsert
+
+      metricstransform:
+        transforms:
+          - include: .*
+            match_type: regexp
+            action: update
+            operations:
+              # Add unique collector instance label to all metrics
+              - action: add_label
+                new_label: "collector_instance"
+                new_value: "${HOSTNAME}"
+
+      # Resource detection for basic system information
+      resourcedetection:
+        detectors: [gcp, env, system]
+        timeout: 5s
+        override: false
+
+    exporters:
+    #  debug:
+    #    verbosity: basic
+       # Export to OTel Gateway
+       otlp:
+         endpoint:  otel-gateway.observability.svc.cluster.local:4317  # otel-gateway.observability.svc.cluster.local:4317
+         tls:
+           insecure: true
+         sending_queue:
+           enabled: true
+           num_consumers: 10
+           queue_size: 5000
+         retry_on_failure:
+           enabled: true
+           initial_interval: 5s
+           max_interval: 30s
+           max_elapsed_time: 300s
+
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      pprof:
+        endpoint: 0.0.0.0:1777
+      zpages:
+        endpoint: 0.0.0.0:55679
+
+    service:
+      extensions: [health_check, pprof, zpages]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes, resource, resourcedetection, batch]
+          exporters: [otlp] #[otlp, logging]
+        metrics:
+          receivers: [otlp, prometheus]
+          processors: [memory_limiter, metricstarttime, k8sattributes, resource, resourcedetection, metricstransform, batch]
+          exporters: [otlp] # [otlp, logging]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes, resource, resourcedetection, batch]
+          exporters: [otlp] # [otlp, logging]
+      telemetry:
+        logs:
+          encoding: json

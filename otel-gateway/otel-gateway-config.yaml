@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-gateway-config
+  namespace: observability
+  labels:
+    app: otel-gateway
+    component: gateway
+data:
+  otel-gateway-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+      # Prometheus receiver for gateway self-monitoring
+      # prometheus:
+      #   config:
+      #     scrape_configs:
+      #       - job_name: 'otel-gateway'
+      #         scrape_interval: 30s
+      #         static_configs:
+      #           - targets: ['localhost:8888']
+      
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 85
+        spike_limit_percentage: 20
+
+      batch:
+        timeout: 30s
+        send_batch_size: 1000
+        send_batch_max_size: 2000
+
+      resourcedetection:
+        detectors: [gcp, env, system]
+        timeout: 10s
+        override: false
+
+      resource:
+        attributes:
+          - key: service.instance.id
+            value: "${HOSTNAME}"
+            action: upsert
+          - key: otel.collector.type
+            value: "gateway"
+            action: upsert
+          - key: deployment.environment
+            value: "dev"
+            action: upsert
+          # Vendor-agnostic attributes
+          - key: k8s.cluster.name
+            value: "${K8S_CLUSTER_NAME}"
+            action: upsert
+          - key: cloud.region
+            value: "${GCP_REGION}"
+            action: upsert
+          - key: cloud.provider
+            value: "gcp"
+            action: upsert
+
+    exporters:
+      # googlemanagedprometheus:
+      googlecloud:
+        project: "${GCP_PROJECT_ID}"
+        metric:
+          prefix: "custom.googleapis.com/gateway"
+          skip_create_descriptor: true
+          instrumentation_library_labels: true
+          service_resource_labels: true
+          # Reduce metric frequency
+          create_service_timeseries: false
+        log:
+          default_log_name: "opentelemetry.io/collector-exported-log"
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 1000
+        timeout: 60s
+
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      pprof:
+        endpoint: 0.0.0.0:1777
+      zpages:
+        endpoint: 0.0.0.0:55679
+
+    service:
+      extensions: [health_check, pprof, zpages]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, resourcedetection, batch]
+          exporters: [googlecloud]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, resourcedetection, batch] # [memory_limiter, filter, metricstarttime, resource, resourcedetection, metricstransform, batch] # filter
+          exporters: [googlecloud]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, resourcedetection, batch]
+          exporters: [googlecloud]
+      telemetry:
+        logs:
+          encoding: json
+        metrics:
+          level: none

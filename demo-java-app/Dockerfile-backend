@@ -1,0 +1,61 @@
+# Build stage - Maven compilation
+FROM maven:3.9.6-eclipse-temurin-17 AS builder
+
+WORKDIR /build
+
+# Copy Maven configuration file for dependency caching
+COPY ./backend-service/pom.xml .
+
+# Download dependencies (cached layer)
+RUN mvn dependency:go-offline -DskipTests
+
+# Copy source code
+COPY ./backend-service/src ./src
+
+# Build the application
+RUN mvn clean package -DskipTests
+
+# OpenTelemetry agent download stage
+FROM curlimages/curl:latest AS otel-downloader
+
+WORKDIR /otel
+
+# Download latest OpenTelemetry Java agent (version 2.20.0 as of October 2025)
+RUN curl -L -o opentelemetry-javaagent.jar \
+    https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.20.0/opentelemetry-javaagent.jar
+
+# Runtime stage - JRE only
+FROM eclipse-temurin:17-jre-jammy AS runtime
+
+# Create non-root user for security
+RUN addgroup --system --gid 1001 appgroup && \
+    adduser --system --uid 1001 --gid 1001 --no-create-home appuser
+
+WORKDIR /app
+
+# Copy built JAR from build stage
+COPY --from=builder /build/target/backend-service-*.jar app.jar
+
+# Copy OpenTelemetry agent from download stage
+COPY --from=otel-downloader /otel/opentelemetry-javaagent.jar /otel/opentelemetry-javaagent.jar
+
+# Set environment variables for OTEL auto-instrumentation
+ENV JAVA_TOOL_OPTIONS="-javaagent:/otel/opentelemetry-javaagent.jar"
+ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+ENV OTEL_RESOURCE_ATTRIBUTES=service.name=backend-service
+ENV OTEL_TRACES_EXPORTER=otlp
+
+# Change ownership to non-root user
+RUN chown -R appuser:appgroup /app /otel
+
+# Switch to non-root user
+USER appuser
+
+EXPOSE 8081
+
+# Health check
+# HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+#     CMD curl -f http://localhost:8081/actuator/health || exit 1
+
+# Run the application
+CMD ["java", "-jar", "app.jar"]

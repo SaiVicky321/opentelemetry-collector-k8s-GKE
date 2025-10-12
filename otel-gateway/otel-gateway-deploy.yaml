@@ -1,0 +1,181 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-gateway
+  namespace: observability
+  labels:
+    app: otel-gateway
+    component: gateway
+spec:
+  replicas: 2  # Start with 3 replicas for HA
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0  # Ensure no downtime during updates
+  selector:
+    matchLabels:
+      app: otel-gateway
+      component: gateway
+  template:
+    metadata:
+      labels:
+        app: otel-gateway
+        component: gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8888"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: otel-gateway
+      # priorityClassName: otel-gateway-priority
+      
+      # Pod Anti-Affinity to spread pods across nodes/zones
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - otel-gateway
+              topologyKey: kubernetes.io/hostname
+          # Spread across zones for better HA
+          - weight: 50
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - otel-gateway
+              topologyKey: topology.kubernetes.io/zone
+      
+      # Topology spread constraints for even distribution
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: otel-gateway
+            component: gateway
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: otel-gateway
+            component: gateway
+      
+      containers:
+      - name: otel-gateway
+        image: otel/opentelemetry-collector-contrib:0.136.0
+        imagePullPolicy: IfNotPresent
+        
+        command:
+          - "/otelcol-contrib"
+          - "--config=/conf/otel-gateway-config.yaml"
+        
+        ports:
+        - name: otlp-grpc
+          containerPort: 4317
+          protocol: TCP
+        - name: otlp-http
+          containerPort: 4318
+          protocol: TCP
+        - name: metrics
+          containerPort: 8888
+          protocol: TCP
+        - name: healthcheck
+          containerPort: 13133
+          protocol: TCP
+        - name: zpages
+          containerPort: 55679
+          protocol: TCP
+        
+        env:
+        - name: K8S_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: K8S_POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: K8S_POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        # GCP Configuration - UPDATE THESE VALUES
+        - name: GCP_PROJECT_ID
+          value: "teak-proton-472112-q0"  # REPLACE WITH YOUR PROJECT ID
+        - name: K8S_CLUSTER_NAME
+          value: "gkestd-mf-dev-public-as1-01"  # REPLACE WITH YOUR CLUSTER NAME
+        - name: GCP_REGION
+          value: "us-central1"  # REPLACE WITH YOUR REGION (e.g., us-central1, asia-south1)
+        
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        
+        volumeMounts:
+        - name: otel-gateway-config-vol
+          mountPath: /conf
+        # For GCP Service Account Key (if not using Workload Identity)
+        # - name: gcp-sa-key
+        #   mountPath: /var/secrets/google
+        #   readOnly: true
+        
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 13133
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 13133
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        # Startup probe for slow initialization
+        startupProbe:
+          httpGet:
+            path: /
+            port: 13133
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 12  # 60 seconds total
+      
+      volumes:
+      - name: otel-gateway-config-vol
+        configMap:
+          name: otel-gateway-config
+          items:
+          - key: otel-gateway-config.yaml
+            path: otel-gateway-config.yaml
+      # For GCP Service Account Key (if not using Workload Identity)
+      # - name: gcp-sa-key
+      #   secret:
+      #     secretName: gcp-sa-key
+      
+      terminationGracePeriodSeconds: 30 # Pod gets enough time (30s) to shut down gracefully, flush telemetry.

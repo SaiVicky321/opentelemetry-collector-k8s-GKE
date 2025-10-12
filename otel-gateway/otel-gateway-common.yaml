@@ -1,0 +1,170 @@
+---
+# 1. ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otel-gateway
+  namespace: observability
+  labels:
+    app: otel-gateway
+    component: gateway
+  annotations:
+    iam.gke.io/gcp-service-account: "sa-demo-otelgateway@teak-proton-472112-q0.iam.gserviceaccount.com"
+
+---
+# 2. ClusterRole (Optional - only if gateway needs K8s API access)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otel-gateway
+  labels:
+    app: otel-gateway
+    component: gateway
+rules:
+  # Minimal permissions for K8s resource detection
+  - apiGroups: [""]
+    resources:
+      - namespaces
+      - nodes
+    verbs: ["get", "list"]
+
+---
+# 3. ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-gateway
+  labels:
+    app: otel-gateway
+    component: gateway
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: otel-gateway
+subjects:
+  - kind: ServiceAccount
+    name: otel-gateway
+    namespace: observability
+
+# 4. ConfigMap - OTel Gateway Configuration
+# 5. Deployment
+
+---
+# 6. Service - ClusterIP for agent→gateway traffic
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-gateway
+  namespace: observability
+  labels:
+    app: otel-gateway
+    component: gateway
+spec:
+  type: ClusterIP
+  selector:
+    app: otel-gateway
+    component: gateway
+  ports:
+  - name: otlp-grpc
+    port: 4317
+    targetPort: 4317
+    protocol: TCP
+  - name: otlp-http
+    port: 4318
+    targetPort: 4318
+    protocol: TCP
+  - name: metrics
+    port: 8888
+    targetPort: 8888
+    protocol: TCP
+  - name: healthcheck
+    port: 13133
+    targetPort: 13133
+    protocol: TCP
+  sessionAffinity: None
+
+---
+# 7. HorizontalPodAutoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: otel-gateway-hpa
+  namespace: observability
+  labels:
+    app: otel-gateway
+    component: gateway
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: otel-gateway
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  # CPU-based scaling
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 75
+  # Memory-based scaling
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300  # 5 minutes
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 60  # 1 minute
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+      - type: Pods
+        value: 2
+        periodSeconds: 30
+      selectPolicy: Max
+
+# ---
+# # 8. PodDisruptionBudget
+# apiVersion: policy/v1
+# kind: PodDisruptionBudget
+# metadata:
+#   name: otel-gateway-pdb
+#   namespace: observability
+#   labels:
+#     app: otel-gateway
+#     component: gateway
+# spec:
+#   minAvailable: 2  # Ensures at least 2 pods available during disruptions
+#   selector:
+#     matchLabels:
+#       app: otel-gateway
+#       component: gateway
+
+# ---
+# # 9. PriorityClass
+# apiVersion: scheduling.k8s.io/v1
+# kind: PriorityClass
+# metadata:
+#   name: otel-gateway-priority
+#   labels:
+#     app: otel-gateway
+#     component: gateway
+# value: 1000000  # High priority
+# globalDefault: false
+# description: "Priority class for OTel gateway to prevent eviction during resource pressure"
+
+
