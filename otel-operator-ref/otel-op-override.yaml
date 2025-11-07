@@ -1,0 +1,19 @@
+manager:
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+      ephemeral-storage: 50Mi
+    requests:
+      cpu: 100m
+      memory: 64Mi
+      ephemeral-storage: 50Mi
+
+kubeRBACProxy:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 128Mi
+    requests:
+      cpu: 5m
+      memory: 64Mi

@@ -12,15 +12,22 @@ spec:
       app: backend-service
   template:
     metadata:
+      annotations:
+        instrumentation.opentelemetry.io/inject-java: "true"
       labels:
         app: backend-service
     spec:
       containers:
       - name: backend-service
-        image: us-central1-docker.pkg.dev/teak-proton-472112-q0/docker/backend-service:latest
+        image: saivicky321/java-2-tier-app:backend-v1
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8081
+        env:
+        - name: HOST_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
         resources:
           requests:
             memory: "256Mi"

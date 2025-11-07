@@ -12,18 +12,24 @@ spec:
       app: frontend-service
   template:
     metadata:
+      annotations:
+        instrumentation.opentelemetry.io/inject-java: "true"
       labels:
         app: frontend-service
     spec:
       containers:
       - name: frontend-service
-        image: us-central1-docker.pkg.dev/teak-proton-472112-q0/docker/frontend-service:latest
+        image: saivicky321/java-2-tier-app:frontend-v1
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
         env:
         - name: BACKEND_SERVICE_URL
           value: "http://backend-service.java-demo.svc.cluster.local:8081"
+        - name: HOST_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
         resources:
           requests:
             memory: "256Mi"
@@ -45,40 +51,7 @@ spec:
     app: frontend-service
   ports:
   - name: http
-    port: 8080
+    port: 80
     targetPort: 8080
     protocol: TCP
-  type: ClusterIP
-
----
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: Gateway
-metadata:
-  name: frontend-gateway
-  namespace: java-demo
-spec:
-  gatewayClassName: gke-l7-global-external-managed
-  listeners:
-    - name: http
-      protocol: HTTP
-      port: 80
-
----
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: HTTPRoute
-metadata:
-  name: frontend-ui-route
-  namespace: java-demo
-spec:
-  parentRefs:
-    - name: frontend-gateway
-      namespace: java-demo
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: frontend-service
-          port: 8080
-          kind: Service
+  type: LoadBalancer

@@ -17,15 +17,6 @@ data:
             endpoint: 0.0.0.0:4317
           http:
             endpoint: 0.0.0.0:4318
-      
-      # # Prometheus receiver for scraping pod metrics
-      prometheus:
-        config:
-          scrape_configs:
-            - job_name: 'otel-agent'
-              scrape_interval: 30s
-              static_configs:
-                - targets: ['localhost:8888']
 
     processors:
       # Memory limiter to prevent OOM
@@ -36,7 +27,7 @@ data:
 
       # Batch processor for efficiency
       batch:
-        timeout: 30s
+        timeout: 25s
         send_batch_size: 1024
         send_batch_max_size: 2048
 
@@ -104,22 +95,24 @@ data:
         override: false
 
     exporters:
-    #  debug:
-    #    verbosity: basic
-       # Export to OTel Gateway
-       otlp:
-         endpoint:  otel-gateway.observability.svc.cluster.local:4317  # otel-gateway.observability.svc.cluster.local:4317
-         tls:
-           insecure: true
-         sending_queue:
-           enabled: true
-           num_consumers: 10
-           queue_size: 5000
-         retry_on_failure:
-           enabled: true
-           initial_interval: 5s
-           max_interval: 30s
-           max_elapsed_time: 300s
+     debug:
+       verbosity: basic
+      # googlecloud:
+      #   project: "${GCP_PROJECT_ID}"
+      #   metric:
+      #     prefix: "custom.googleapis.com/agent"
+      #     skip_create_descriptor: true
+      #     instrumentation_library_labels: true
+      #     service_resource_labels: true
+      #     # Reduce metric frequency
+      #     create_service_timeseries: false
+      #   log:
+      #     default_log_name: "opentelemetry.io/collector-exported-log"
+      #   sending_queue:
+      #     enabled: true
+      #     num_consumers: 4
+      #     queue_size: 1000
+      #   timeout: 60s
 
     extensions:
       health_check:
@@ -135,15 +128,15 @@ data:
         traces:
           receivers: [otlp]
           processors: [memory_limiter, k8sattributes, resource, resourcedetection, batch]
-          exporters: [otlp] #[otlp, logging]
+          exporters: [debug] #[otlp, logging]
         metrics:
-          receivers: [otlp, prometheus]
+          receivers: [otlp]
           processors: [memory_limiter, metricstarttime, k8sattributes, resource, resourcedetection, metricstransform, batch]
-          exporters: [otlp] # [otlp, logging]
+          exporters: [debug] # [otlp, logging]
         logs:
           receivers: [otlp]
           processors: [memory_limiter, k8sattributes, resource, resourcedetection, batch]
-          exporters: [otlp] # [otlp, logging]
+          exporters: [debug] # [otlp, logging]
       telemetry:
         logs:
           encoding: json

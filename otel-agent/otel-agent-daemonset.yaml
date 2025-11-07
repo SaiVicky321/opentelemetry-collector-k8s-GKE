@@ -80,14 +80,16 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
+        - name: GCP_PROJECT_ID
+          value: "teak-proton-472112"    
         
-        resources:
-          requests:
-            cpu: 200m
-            memory: 256Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
+        # resources:
+        #   requests:
+        #     cpu: 200m
+        #     memory: 256Mi
+        #   limits:
+        #     cpu: 500m
+        #     memory: 512Mi
         
         volumeMounts:
         - name: otel-agent-config-vol
