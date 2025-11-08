@@ -81,7 +81,7 @@ spec:
             fieldRef:
               fieldPath: status.podIP
         - name: GCP_PROJECT_ID
-          value: "teak-proton-472112"    
+          value: "teak-proton-472112-q0"    
         
         # resources:
         #   requests:

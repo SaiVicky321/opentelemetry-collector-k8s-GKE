@@ -13,7 +13,7 @@ spec:
   template:
     metadata:
       annotations:
-        instrumentation.opentelemetry.io/inject-java: "true"
+        instrumentation.opentelemetry.io/inject-java: "opentelemetry-operator-system/java-instrumentation"
       labels:
         app: frontend-service
     spec:
@@ -30,6 +30,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.hostIP
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: "service.name=frontend-service-demo,team.name=java, team.owner=sai"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://$(HOST_IP):4318"
         resources:
           requests:
             memory: "256Mi"

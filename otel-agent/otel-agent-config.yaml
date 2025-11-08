@@ -31,10 +31,6 @@ data:
         send_batch_size: 1024
         send_batch_max_size: 2048
 
-      # Fix timing issues
-      metricstarttime:
-        strategy: subtract_initial_point
-
       # Kubernetes attributes processor for metadata enrichment
       k8sattributes:
         auth_type: "serviceAccount"
@@ -76,6 +72,10 @@ data:
           - key: otel.collector.type
             value: "agent"
             action: upsert
+          - key: service.instance.id
+            value: "${K8S_NODE_NAME}"
+            action: upsert
+        
 
       metricstransform:
         transforms:
@@ -95,24 +95,24 @@ data:
         override: false
 
     exporters:
-     debug:
-       verbosity: basic
-      # googlecloud:
-      #   project: "${GCP_PROJECT_ID}"
-      #   metric:
-      #     prefix: "custom.googleapis.com/agent"
-      #     skip_create_descriptor: true
-      #     instrumentation_library_labels: true
-      #     service_resource_labels: true
-      #     # Reduce metric frequency
-      #     create_service_timeseries: false
-      #   log:
-      #     default_log_name: "opentelemetry.io/collector-exported-log"
-      #   sending_queue:
-      #     enabled: true
-      #     num_consumers: 4
-      #     queue_size: 1000
-      #   timeout: 60s
+    #  debug:
+    #    verbosity: basic
+      googlecloud:
+        project: "${GCP_PROJECT_ID}"
+        metric:
+          prefix: "custom.googleapis.com/agent"
+          skip_create_descriptor: true
+          instrumentation_library_labels: true
+          service_resource_labels: true
+          # Reduce metric frequency
+          create_service_timeseries: false
+        log:
+          default_log_name: "opentelemetry.io/collector-exported-log-new"
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 1000
+        timeout: 60s
 
     extensions:
       health_check:
@@ -128,15 +128,15 @@ data:
         traces:
           receivers: [otlp]
           processors: [memory_limiter, k8sattributes, resource, resourcedetection, batch]
-          exporters: [debug] #[otlp, logging]
+          exporters: [googlecloud] #[otlp, logging]
         metrics:
           receivers: [otlp]
-          processors: [memory_limiter, metricstarttime, k8sattributes, resource, resourcedetection, metricstransform, batch]
-          exporters: [debug] # [otlp, logging]
+          processors: [memory_limiter, k8sattributes, resource, resourcedetection, metricstransform, batch]
+          exporters: [googlecloud] # [otlp, logging]
         logs:
           receivers: [otlp]
           processors: [memory_limiter, k8sattributes, resource, resourcedetection, batch]
-          exporters: [debug] # [otlp, logging]
+          exporters: [googlecloud] # [otlp, logging]
       telemetry:
         logs:
           encoding: json

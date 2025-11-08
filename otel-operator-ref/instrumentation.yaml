@@ -2,14 +2,19 @@ apiVersion: opentelemetry.io/v1alpha1
 kind: Instrumentation
 metadata:
   name: java-instrumentation
+  namespace: opentelemetry-operator-system
 spec:
-  exporter:
-    endpoint: http://${HOST_IP}:4318
+  # exporter:
+  #   endpoint: http://$${HOST_IP}:4318
   propagators:
     - tracecontext
     - baggage
+    - b3
   sampler:
     type: parentbased_traceidratio
     argument: "1"
   java:
-    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:latest
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.19.0
+    env:
+      - name: OTEL_RESOURCE_ATTRIBUTES
+        value: "deployment.environment=dev"
