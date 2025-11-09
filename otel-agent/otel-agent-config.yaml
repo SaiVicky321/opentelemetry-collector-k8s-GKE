@@ -101,11 +101,6 @@ data:
         project: "${GCP_PROJECT_ID}"
         metric:
           prefix: "custom.googleapis.com/agent"
-          skip_create_descriptor: true
-          instrumentation_library_labels: true
-          service_resource_labels: true
-          # Reduce metric frequency
-          create_service_timeseries: false
         log:
           default_log_name: "opentelemetry.io/collector-exported-log-new"
         sending_queue:

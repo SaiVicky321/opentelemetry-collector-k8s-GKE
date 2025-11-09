@@ -1,4 +1,11 @@
 manager:
+  image:
+    repository: us-central1-docker.pkg.dev/teak-proton-472112-q0/docker/opentelemetry-operator
+    tag: latest
+    imagePullPolicy: IfNotPresent
+  collectorImage:
+    repository: us-central1-docker.pkg.dev/teak-proton-472112-q0/docker/opentelemetry-collector-k8s
+    tag: 0.138.0
   resources:
     limits:
       cpu: 100m
@@ -10,6 +17,9 @@ manager:
       ephemeral-storage: 50Mi
 
 kubeRBACProxy:
+  image:
+    repository: us-central1-docker.pkg.dev/teak-proton-472112-q0/docker/kube-rbac-proxy
+    tag: v0.19.1
   resources:
     limits:
       cpu: 500m

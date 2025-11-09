@@ -33,7 +33,7 @@ spec:
       
       containers:
       - name: otel-agent
-        image: otel/opentelemetry-collector-contrib:0.136.0
+        image: us-central1-docker.pkg.dev/teak-proton-472112-q0/docker/otel/opentelemetry-collector-contrib:0.136.0
         imagePullPolicy: IfNotPresent
         
         command:
@@ -52,7 +52,7 @@ spec:
         - name: metrics
           containerPort: 8888
           protocol: TCP
-        - name: healthcheck
+        - name: healthcheckk8 
           containerPort: 13133
           protocol: TCP
         - name: zpages

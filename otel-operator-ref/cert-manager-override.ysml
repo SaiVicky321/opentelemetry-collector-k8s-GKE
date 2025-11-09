@@ -1,0 +1,24 @@
+image:
+  repository: us-central1-docker.pkg.dev/teak-proton-472112-q0/docker/cert-manager-controller
+  tag: v1.19.1
+
+webhook:
+  image:
+    repository: us-central1-docker.pkg.dev/teak-proton-472112-q0/docker/cert-manager-webhook
+    tag: v1.19.1
+
+cainjector:
+  image:
+    repository: us-central1-docker.pkg.dev/teak-proton-472112-q0/docker/cert-manager-cainjector
+    tag: v1.19.1
+
+acmesolver:
+  image:
+    repository: us-central1-docker.pkg.dev/teak-proton-472112-q0/docker/cert-manager-acmesolver
+    tag: v1.19.1
+
+startupapicheck:
+  image:
+    repository: us-central1-docker.pkg.dev/teak-proton-472112-q0/docker/cert-manager-startupapicheck
+    tag: v1.19.1
+
